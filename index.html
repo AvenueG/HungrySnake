@@ -228,18 +228,6 @@
             font-size: 1.5rem;
         }
 
-        #p2-hud {
-            position: absolute;
-            top: 48px;
-            right: 20px;
-            color: rgba(255,102,204,0.85);
-            font-size: 0.9rem;
-            pointer-events: none;
-            z-index: 5;
-            text-shadow: 1px 1px 2px black;
-            text-align: right;
-        }
-
         #map-indicator {
             position: absolute;
             bottom: 20px;
@@ -333,7 +321,6 @@
 
     <div id="game-container">
         <div id="hud">分数: <span id="current-score">0</span> · 长度: <span id="snake-length">3</span></div>
-        <div id="p2-hud">P2: 按 <span class="key-badge">G</span> 加入 · WASD 操控</div>
         <div id="map-indicator">地图: 20×20</div>
         <div id="buff-indicator"></div>
         <div id="status-indicator">SLOW MOTION</div>
@@ -354,7 +341,6 @@
                 <p style="color:#ccc;">敌对蛇更长时会追猎你；你更长才能反杀；得分达标地图扩张</p>
                 <p style="margin-top:8px;color:#ccc;">连吃同色食物×3触发老虎机增益（异色重置）</p>
                 <p style="color:#aaa;font-size:0.8rem;">红狂怒·蓝幻影·黄磁力·绿缩骨·紫金手</p>
-                <p style="margin-top:6px;color:#ccc;"><span class="key-badge">G</span> 双人 · P2: <span class="key-badge">W</span>前进 <span class="key-badge">S</span>后退 <span class="key-badge">A</span>/<span class="key-badge">D</span>转向</p>
             </div>
         </div>
 
@@ -385,7 +371,6 @@
             const currentScoreEl = document.getElementById('current-score');
             const snakeLengthEl = document.getElementById('snake-length');
             const mapIndicatorEl = document.getElementById('map-indicator');
-            const p2HudEl = document.getElementById('p2-hud');
             const finalScoreEl = document.getElementById('final-score-val');
             const statusIndicator = document.getElementById('status-indicator');
             const buffIndicator = document.getElementById('buff-indicator');
@@ -415,8 +400,6 @@
                 mutationPurple: '#bb44ff',
                 adversaryHead: '#ff8800',
                 adversaryBody: '#cc5500',
-                p2Head: '#ff66cc',
-                p2Body: '#cc4499',
                 particle: ['#ff0055', '#ff9900', '#ffff00', '#00ffcc', '#bb44ff']
             };
 
@@ -431,7 +414,6 @@
             let buffToastEnd = 0;
             let buffToastText = '';
             let adversaries = [];
-            let player2 = null;
             let dx = 0, dy = 0, nextDx = 0, nextDy = 0;
             let score = 0;
             let tickCount = 0;
@@ -476,107 +458,13 @@
 
             function updateHudLength() {
                 if (snakeLengthEl) snakeLengthEl.textContent = snake.length;
-                if (p2HudEl) {
-                    p2HudEl.textContent = player2 && player2.active
-                        ? `P2 长度: ${player2.body.length} · 分: ${player2.score}`
-                        : 'P2: 按 G 加入 · WASD';
-                }
             }
-
-            function isPlayer2Active() {
-                return player2 && player2.active && player2.body.length > 0;
-            }
-
-            function getP2Facing() {
-                const cdx = player2.nextDx !== 0 ? player2.nextDx : player2.dx;
-                const cdy = player2.nextDy !== 0 ? player2.nextDy : player2.dy;
-                if (cdx === 0 && cdy === 0) return { dx: 1, dy: 0 };
-                return { dx: cdx, dy: cdy };
-            }
-
-            function joinPlayer2() {
-                if (isPlayer2Active() || isGameOver) return;
-                if (startScreen && !startScreen.classList.contains('hidden')) return;
-                const occupied = getOccupiedCells(false);
-                for (let attempt = 0; attempt < 400; attempt++) {
-                    const x = 2 + Math.floor(Math.random() * Math.max(1, tileCount - 5));
-                    const y = 2 + Math.floor(Math.random() * Math.max(1, tileCount - 5));
-                    const cells = [
-                        cellKey(x, y), cellKey(x - 1, y), cellKey(x - 2, y)
-                    ];
-                    if (cells.every(c => !occupied.has(c))) {
-                        player2 = {
-                            body: [{ x, y }, { x: x - 1, y }, { x: x - 2, y }],
-                            dx: 1, dy: 0, nextDx: 1, nextDy: 0,
-                            score: 0, active: true
-                        };
-                        showBuffToast('P2 已加入 · WASD', COLORS.p2Head);
-                        updateHudLength();
-                        return;
-                    }
-                }
-            }
-
-            function killPlayer2() {
-                if (!player2) return;
-                const h = player2.body[0];
-                window.createExplosion(
-                    h.x * GRID_SIZE + GRID_SIZE / 2,
-                    h.y * GRID_SIZE + GRID_SIZE / 2,
-                    COLORS.p2Head
-                );
-                player2 = null;
-                updateHudLength();
-            }
-
-            function absorbPlayer2() {
-                if (!isPlayer2Active()) return;
-                const h = player2.body[0];
-                window.createExplosion(
-                    h.x * GRID_SIZE + GRID_SIZE / 2,
-                    h.y * GRID_SIZE + GRID_SIZE / 2,
-                    COLORS.p2Head
-                );
-                for (let i = player2.body.length - 1; i >= 1; i--) {
-                    snake.push({ x: player2.body[i].x, y: player2.body[i].y });
-                }
-                score += player2.body.length * 8;
-                updateScore(score);
-                player2 = null;
-                updateHudLength();
-            }
-
-            window.handleP2Input = function(key) {
-                if (!isPlayer2Active()) return;
-                const k = key.length === 1 ? key.toLowerCase() : key;
-                const face = getP2Facing();
-                let cdx = face.dx, cdy = face.dy;
-                switch (k) {
-                    case 'w':
-                        player2.nextDx = cdx;
-                        player2.nextDy = cdy;
-                        break;
-                    case 's':
-                        player2.nextDx = -cdx;
-                        player2.nextDy = -cdy;
-                        break;
-                    case 'a':
-                        player2.nextDx = cdy;
-                        player2.nextDy = -cdx;
-                        break;
-                    case 'd':
-                        player2.nextDx = -cdy;
-                        player2.nextDy = cdx;
-                        break;
-                }
-            };
 
             function cellKey(x, y) { return x + ',' + y; }
 
             function getOccupiedCells(excludeFood) {
                 const cells = new Set();
                 snake.forEach(s => cells.add(cellKey(s.x, s.y)));
-                if (isPlayer2Active()) player2.body.forEach(s => cells.add(cellKey(s.x, s.y)));
                 adversaries.forEach(adv => adv.body.forEach(s => cells.add(cellKey(s.x, s.y))));
                 if (!excludeFood) foods.forEach(f => cells.add(cellKey(f.x, f.y)));
                 return cells;
@@ -722,11 +610,6 @@
                 const targets = foods.map(f => ({ x: f.x, y: f.y, type: 'food' }));
                 if (advLen > snake.length) {
                     snake.forEach((seg, idx) => {
-                        targets.push({ x: seg.x, y: seg.y, type: 'prey', isHead: idx === 0 });
-                    });
-                }
-                if (isPlayer2Active() && advLen > player2.body.length) {
-                    player2.body.forEach((seg, idx) => {
                         targets.push({ x: seg.x, y: seg.y, type: 'prey', isHead: idx === 0 });
                     });
                 }
@@ -889,116 +772,10 @@
                             break;
                         }
                     }
-
-                    if (!isPlayer2Active()) continue;
-                    const p2h = player2.body[0];
-                    const p2len = player2.body.length;
-
-                    if (p2h.x === ah.x && p2h.y === ah.y) {
-                        if (p2len > advLen) {
-                            for (let i = adv.body.length - 1; i >= 1; i--) {
-                                player2.body.push({ x: adv.body[i].x, y: adv.body[i].y });
-                            }
-                            killAdversary(a);
-                        } else if (advLen > p2len) killPlayer2();
-                        continue;
-                    }
-
-                    for (let j = 1; j < adv.body.length; j++) {
-                        if (p2h.x === adv.body[j].x && p2h.y === adv.body[j].y) {
-                            if (p2len > advLen) killAdversary(a);
-                            else killPlayer2();
-                            break;
-                        }
-                    }
-
-                    for (let j = 1; j < adv.body.length; j++) {
-                        if (ah.x === player2.body[j].x && ah.y === player2.body[j].y) {
-                            if (advLen > p2len) killPlayer2();
-                            else killAdversary(a);
-                            break;
-                        }
-                    }
                 }
             }
 
-            function resolvePlayer2Combat() {
-                if (!isPlayer2Active()) return;
-                const p2h = player2.body[0];
-                const p2len = player2.body.length;
-                const ph = snake[0];
-                const plen = snake.length;
 
-                if (p2h.x === ph.x && p2h.y === ph.y) {
-                    if (p2len > plen) window.gameOver();
-                    else if (plen > p2len) absorbPlayer2();
-                    else killPlayer2();
-                    return;
-                }
-
-                for (let j = 1; j < snake.length; j++) {
-                    if (p2h.x === snake[j].x && p2h.y === snake[j].y) {
-                        if (p2len > plen) window.gameOver();
-                        else killPlayer2();
-                        return;
-                    }
-                }
-
-                for (let j = 1; j < player2.body.length; j++) {
-                    if (ph.x === player2.body[j].x && ph.y === player2.body[j].y) {
-                        if (plen > p2len) absorbPlayer2();
-                        else window.gameOver();
-                        return;
-                    }
-                }
-            }
-
-            function updatePlayer2() {
-                if (!isPlayer2Active()) return;
-
-                player2.dx = player2.nextDx;
-                player2.dy = player2.nextDy;
-                if (player2.dx === 0 && player2.dy === 0) {
-                    player2.dx = 1;
-                    player2.dy = 0;
-                }
-
-                const head = {
-                    x: player2.body[0].x + player2.dx,
-                    y: player2.body[0].y + player2.dy
-                };
-
-                if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-                    killPlayer2();
-                    return;
-                }
-
-                for (let i = 0; i < player2.body.length; i++) {
-                    if (head.x === player2.body[i].x && head.y === player2.body[i].y) {
-                        killPlayer2();
-                        return;
-                    }
-                }
-
-                player2.body.unshift(head);
-                let grew = false;
-                const foodIdx = foods.findIndex(f => f.x === head.x && f.y === head.y);
-                if (foodIdx >= 0) {
-                    const f = foods[foodIdx];
-                    const base = f.value || (f.isGold ? 50 : 10);
-                    player2.score += base;
-                    window.createExplosion(
-                        head.x * GRID_SIZE + GRID_SIZE / 2,
-                        head.y * GRID_SIZE + GRID_SIZE / 2,
-                        f.isGold ? GOLD_COLOR : (SLOT_TYPES[f.color] && SLOT_TYPES[f.color].color)
-                    );
-                    foods.splice(foodIdx, 1);
-                    if (foods.length === 0) placeFood();
-                    grew = true;
-                }
-
-                if (!grew) player2.body.pop();
-            }
 
             function updateAdversaries() {
                 for (let a = adversaries.length - 1; a >= 0; a--) {
@@ -1063,7 +840,6 @@
                     snake: JSON.parse(JSON.stringify(snake)),
                     foods: JSON.parse(JSON.stringify(foods)),
                     adversaries: JSON.parse(JSON.stringify(adversaries)),
-                    player2: player2 ? JSON.parse(JSON.stringify(player2)) : null,
                     slotCombo: { ...slotCombo },
                     rapidFuryEnd, phantomTurnsLeft, magneticEnd, snakeTint,
                     tileCount,
@@ -1076,7 +852,6 @@
                 snake = state.snake;
                 foods = state.foods || (state.food ? [state.food] : []);
                 adversaries = state.adversaries || [];
-                player2 = state.player2 || null;
                 slotCombo = state.slotCombo || { color: null, count: 0 };
                 rapidFuryEnd = state.rapidFuryEnd || 0;
                 phantomTurnsLeft = state.phantomTurnsLeft || 0;
@@ -1168,11 +943,8 @@
 
                 if (!isRapidFuryActive() && snakeTint === 'red') snakeTint = null;
                 if (!isMagneticActive() && snakeTint === 'yellow') snakeTint = null;
-
-                updatePlayer2();
                 updateAdversaries();
                 resolveCombat();
-                resolvePlayer2Combat();
                 maybeMutate();
                 checkMapExpand();
                 updateHudLength();
@@ -1320,9 +1092,6 @@
                     drawSnakeChain(adv.body, COLORS.adversaryHead, COLORS.adversaryBody, true, false);
                 });
                 drawPlayerSnake();
-                if (isPlayer2Active()) {
-                    drawSnakeChain(player2.body, COLORS.p2Head, COLORS.p2Body, true, false);
-                }
                 drawSlotMachine();
                 window.drawParticles();
             };
@@ -1400,7 +1169,6 @@
                 lastExpandScore = 0;
                 foods = [];
                 adversaries = [];
-                player2 = null;
                 slotCombo = { color: null, count: 0 };
                 rapidFuryEnd = 0;
                 phantomTurnsLeft = 0;
@@ -1470,15 +1238,6 @@
             document.addEventListener('keydown', (e) => {
                 if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.code)) e.preventDefault();
                 const k = e.key.toLowerCase();
-                if (k === 'g' && !isGameOver) {
-                    joinPlayer2();
-                    e.preventDefault();
-                }
-                if (isPlayer2Active() && ['w', 'a', 's', 'd'].includes(k)) {
-                    window.handleP2Input(k);
-                    e.preventDefault();
-                    return;
-                }
                 if ((e.key === '/' || e.key === '?') && !isRewinding && gameHistory.length > 0) {
                     isRewinding = true;
                     cancelAnimationFrame(gameLoopId);
