@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>时空贪吃蛇 - 完美修复版</title>
+    <style>
+        :root {
+            --bg-color: #050510;
+            --grid-line: #1a1a2e;
+            --primary-color: #00ffcc;
+            --secondary-color: #ff0055;
+            --text-color: #ffffff;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            pointer-events: auto;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        /* 游戏主容器 */
+        #game-container {
+            position: relative;
+            padding: 4px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.2);
+            transition: transform 0.1s, filter 0.3s;
+            z-index: 1000;
+            touch-action: manipulation;
+        }
+
+        /* 倒带时的视觉特效 */
+        .rewind-active canvas {
+            filter: hue-rotate(180deg) sepia(0.8) contrast(1.2);
+        }
+
+        .rewind-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 0 0 20px #000;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1500;
+            font-family: monospace;
+        }
+
+        .rewind-active .rewind-text {
+            opacity: 0.8;
+            animation: pulseText 0.5s infinite alternate;
+        }
+
+        @keyframes pulseText {
+            from { transform: translate(-50%, -50%) scale(1); }
+            to { transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+            40%, 60% { transform: translate3d(8px, 0, 0); }
+        }
+
+        canvas {
+            background-color: var(--bg-color);
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 20px 20px;
+            border-radius: 8px;
+            display: block;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            transition: filter 0.2s ease;
+        }
+
+        .slow-mo-active canvas {
+            filter: contrast(1.2) sepia(0.3) hue-rotate(180deg) brightness(0.8);
+        }
+
+        /* UI 覆盖层 */
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(5, 5, 16, 0.85);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            z-index: 2000;
+            transition: opacity 0.3s ease;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--primary-color), #fff, var(--secondary-color));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+            animation: glow 2s infinite alternate;
+            pointer-events: none;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px rgba(0, 255, 204, 0.5); }
+            to { text-shadow: 0 0 25px rgba(255, 0, 85, 0.8); }
+        }
+
+        .score-display {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .controls-hint {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #aaa;
+            text-align: center;
+            line-height: 1.6;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+        }
+
+        .key-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            font-family: monospace;
+            margin: 0 2px;
+        }
+
+        .final-score {
+            font-size: 1.2rem;
+            color: #aaa;
+            margin-bottom: 20px;
+            pointer-events: none;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--bg-color);
+            background: var(--primary-color);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 15px var(--primary-color);
+            text-transform: uppercase;
+            outline: none;
+            z-index: 3000;
+            position: relative;
+            pointer-events: auto !important;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            background: #fff;
+            box-shadow: 0 0 25px #fff;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255,255,255,0.7);
+            font-size: 1.2rem;
+            pointer-events: none;
+            z-index: 5;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        #hud span {
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+
+        #status-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ffeb3b;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 1rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+            text-shadow: 0 0 10px #ffeb3b;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        /* 移动端控制 */
+        #mobile-controls {
+            margin-top: 20px;
+            display: none;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 10px;
+        }
+
+        .d-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto !important;
+        }
+        .d-btn:active { background: rgba(0, 255, 204, 0.3); }
+        .d-up { grid-column: 2; grid-row: 1; }
+        .d-left { grid-column: 1; grid-row: 2; }
+        .d-right { grid-column: 3; grid-row: 2; }
+        .d-down { grid-column: 2; grid-row: 2; }
+        .d-slow { grid-column: 1; grid-row: 3; font-size: 14px; background: rgba(255, 235, 59, 0.1); }
+        .d-undo { grid-column: 3; grid-row: 3; font-size: 14px; background: rgba(255, 0, 85, 0.1); }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 2rem; }
+            #mobile-controls { display: grid; }
+            canvas { width: 340px; height: 340px; background-size: 17px 17px; }
+            .controls-hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="hud">分数: <span id="current-score">0</span></div>
+        <div id="status-indicator">SLOW MOTION</div>
+        <div class="rewind-text"><< REWIND</div>
+
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+        <!-- 开始屏幕 -->
+        <div id="start-screen" class="ui-overlay">
+            <h1>NEON SNAKE</h1>
+            <p class="score-display">时间操控版</p>
+            <button class="btn" id="start-btn" onclick="window.startGame()">开始游戏</button>
+            <div class="controls-hint">
+                <p><span class="key-badge">方向键</span> 移动</p>
+                <p><span class="key-badge">空格</span> 按住减缓时间</p>
+                <p><span class="key-badge">/</span> 按住倒带</p>
+            </div>
+        </div>
+
+        <!-- 游戏结束屏幕 -->
+        <div id="game-over-screen" class="ui-overlay hidden">
+            <h1>GAME OVER</h1>
+            <p class="final-score">最终得分: <span id="final-score-val">0</span></p>
+            <p style="font-size: 0.9rem; color: #888; margin-bottom: 20px;">按住 <span class="key-badge">/</span> 键倒带复活</p>
+            <button class="btn" id="restart-btn" onclick="window.startGame()">重新开始</button>
+        </div>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="d-btn d-up" data-dir="up">▲</div>
+        <div class="d-btn d-left" data-dir="left">◀</div>
+        <div class="d-btn d-right" data-dir="right">▶</div>
+        <div class="d-btn d-down" data-dir="down">▼</div>
+        <div class="d-btn d-slow" id="btn-slow">SLOW</div>
+        <div class="d-btn d-undo" id="btn-undo">UNDO</div>
+    </div>
+
+    <script>
+        (function() {
+            // --- 变量初始化 ---
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const startScreen = document.getElementById('start-screen');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const currentScoreEl = document.getElementById('current-score');
+            const finalScoreEl = document.getElementById('final-score-val');
+            const statusIndicator = document.getElementById('status-indicator');
+            const gameContainer = document.getElementById('game-container');
+
+            const GRID_SIZE = 20;
+            const TILE_COUNT = canvas.width / GRID_SIZE;
+            const GAME_SPEED = 100;
+            const SLOW_FACTOR = 4;
+
+            const COLORS = {
+                snakeHead: '#00ffcc',
+                snakeBody: '#00ccaa',
+                food: '#ff0055',
+                particle: ['#ff0055', '#ff9900', '#ffff00', '#00ffcc']
+            };
+
+            let snake = [];
+            let food = { x: 0, y: 0 };
+            let dx = 0; let dy = 0;
+            let nextDx = 0; let nextDy = 0;
+            let score = 0;
+            let gameLoopId;
+            let rewindLoopId;
+            let lastTime = 0;
+            let isGameOver = false;
+            let particles = [];
+
+            // 状态控制
+            let isSlowingDown = false;
+            let isRewinding = false;
+            let gameHistory = [];
+            const MAX_HISTORY = 200;
+
+            // --- 粒子系统 ---
+            class Particle {
+                constructor(x, y) {
+                    this.x = x; this.y = y;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 3 + 1;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.life = 1.0;
+                    this.decay = Math.random() * 0.03 + 0.02;
+                    this.color = COLORS.particle[Math.floor(Math.random() * COLORS.particle.length)];
+                    this.size = Math.random() * 4 + 2;
+                }
+                update() {
+                    this.x += this.vx; this.y += this.vy;
+                    this.life -= this.decay; this.size *= 0.95;
+                }
+                draw(ctx) {
+                    ctx.save(); ctx.globalAlpha = this.life;
+                    ctx.fillStyle = this.color; ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+                }
+            }
+
+            // --- 核心逻辑函数 (暴露给全局) ---
+
+            window.saveState = function() {
+                // 不保存粒子状态，只保存核心游戏逻辑，保证回退流畅
+                const state = {
+                    snake: JSON.parse(JSON.stringify(snake)),
+                    food: { ...food }, dx: dx, dy: dy,
+                    nextDx: nextDx, nextDy: nextDy, score: score
+                };
+                gameHistory.push(state);
+                if (gameHistory.length > MAX_HISTORY) gameHistory.shift();
+            };
+
+            // 新的倒带循环逻辑
+            function rewindLoop() {
+                if (!isRewinding || gameHistory.length === 0) {
+                    // 停止倒带
+                    isRewinding = false;
+                    gameContainer.classList.remove('rewind-active');
+
+                    // 如果游戏结束了，但现在有历史记录（即刚回退了一步），则复活
+                    if (isGameOver && gameHistory.length >= 0) {
+                        isGameOver = false;
+                        gameOverScreen.classList.add('hidden');
+                        gameContainer.classList.remove('shake');
+                    }
+
+                    // 恢复正常游戏循环
+                    lastTime = performance.now();
+                    gameLoopId = requestAnimationFrame(window.gameLoop);
+                    return;
+                }
+
+                // 1. 弹出状态
+                const state = gameHistory.pop();
+
+                // 2. 应用状态
+                snake = state.snake;
+                food = state.food;
+                dx = state.dx; dy = state.dy;
+                nextDx = state.nextDx; nextDy = state.nextDy;
+                score = state.score;
+                updateScore(score);
+
+                // 3. 绘制
+                window.draw();
+
+                // 4. 快速循环（每帧都回退，产生快退效果）
+                rewindLoopId = requestAnimationFrame(rewindLoop);
+            }
+
+            window.update = function() {
+                // 正常保存状态
+                window.saveState();
+
+                dx = nextDx; dy = nextDy;
+                const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+                // 死亡检测
+                if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
+                    window.gameOver(); return;
+                }
+                for (let i = 0; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) { window.gameOver(); return; }
+                }
+
+                snake.unshift(head);
+                if (head.x === food.x && head.y === food.y) {
+                    score += 10; updateScore(score);
+                    window.createExplosion(head.x * GRID_SIZE + GRID_SIZE/2, head.y * GRID_SIZE + GRID_SIZE/2);
+                    placeFood();
+                } else {
+                    snake.pop();
+                }
+            };
+
+            window.gameLoop = function(timestamp) {
+                // 如果正在倒带，停止正常循环
+                if (isRewinding) return;
+
+                if (isGameOver) return;
+
+                const deltaTime = timestamp - lastTime;
+                const currentSpeed = isSlowingDown ? GAME_SPEED * SLOW_FACTOR : GAME_SPEED;
+
+                if (deltaTime > currentSpeed) {
+                    window.update();
+                    lastTime = timestamp;
+                }
+
+                window.draw();
+                window.updateParticles();
+
+                gameLoopId = requestAnimationFrame(window.gameLoop);
+            };
+
+            window.draw = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                window.drawFood(); window.drawSnake(); window.drawParticles();
+            };
+
+            window.drawSnake = function() {
+                snake.forEach((segment, index) => {
+                    const isHead = index === 0;
+                    ctx.fillStyle = isHead ? COLORS.snakeHead : COLORS.snakeBody;
+                    ctx.shadowBlur = isHead ? 20 : 10; ctx.shadowColor = COLORS.snakeHead;
+                    const x = segment.x * GRID_SIZE; const y = segment.y * GRID_SIZE; const size = GRID_SIZE - 2;
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(x + 1, y + 1, size, size, 4);
+                    else ctx.rect(x + 1, y + 1, size, size);
+                    ctx.fill();
+                    if (isHead) {
+                        ctx.shadowBlur = 0; ctx.fillStyle = '#000'; ctx.beginPath();
+                        ctx.arc(x + 6, y + 6, 3, 0, Math.PI*2); ctx.arc(x + 14, y + 6, 3, 0, Math.PI*2); ctx.fill();
+                    }
+                });
+                ctx.shadowBlur = 0;
+            };
+
+            window.drawFood = function() {
+                const x = food.x * GRID_SIZE + GRID_SIZE / 2;
+                const y = food.y * GRID_SIZE + GRID_SIZE / 2;
+                const pulse = Math.sin(Date.now() / 200) * 3 + 10;
+                ctx.fillStyle = COLORS.food; ctx.shadowBlur = 20; ctx.shadowColor = COLORS.food;
+                ctx.beginPath(); ctx.arc(x, y, pulse / 1.5, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+            };
+
+            window.createExplosion = function(x, y) {
+                for (let i = 0; i < 20; i++) particles.push(new Particle(x, y));
+            };
+
+            window.updateParticles = function() {
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].update(); if (particles[i].life <= 0) particles.splice(i, 1);
+                }
+            };
+
+            window.drawParticles = function() {
+                particles.forEach(p => p.draw(ctx));
+            };
+
+            function placeFood() {
+                let validPosition = false;
+                while (!validPosition) {
+                    food.x = Math.floor(Math.random() * TILE_COUNT);
+                    food.y = Math.floor(Math.random() * TILE_COUNT);
+                    validPosition = true;
+                    for (let segment of snake) {
+                        if (segment.x === food.x && segment.y === food.y) { validPosition = false; break; }
+                    }
+                }
+            }
+
+            function updateScore(val) {
+                currentScoreEl.textContent = val;
+                // 倒带时不播放分数动画，避免闪烁
+                if (!isRewinding) {
+                    currentScoreEl.style.transform = "scale(1.5)"; currentScoreEl.style.color = "#fff";
+                    setTimeout(() => { currentScoreEl.style.transform = "scale(1)"; currentScoreEl.style.color = ""; }, 150);
+                }
+            }
+
+            window.gameOver = function() {
+                isGameOver = true; cancelAnimationFrame(gameLoopId);
+                gameContainer.classList.add('shake'); finalScoreEl.textContent = score;
+                setTimeout(() => gameOverScreen.classList.remove('hidden'), 500);
+            };
+
+            window.initGame = function() {
+                snake = [{ x: 10, y: 10 }, { x: 10, y: 11 }, { x: 10, y: 12 }];
+                dx = 0; dy = -1; nextDx = 0; nextDy = -1;
+                score = 0; particles = []; gameHistory = []; isGameOver = false;
+                isSlowingDown = false; isRewinding = false;
+                updateScore(0); placeFood();
+                gameContainer.classList.remove('shake');
+                gameContainer.classList.remove('slow-mo-active');
+                gameContainer.classList.remove('rewind-active');
+                window.saveState();
+            };
+
+            // --- 核心入口函数 ---
+            window.startGame = function() {
+                console.log("Game Start Triggered");
+                try {
+                    window.initGame();
+                    startScreen.classList.add('hidden');
+                    gameOverScreen.classList.add('hidden');
+                    lastTime = performance.now();
+                    gameLoopId = requestAnimationFrame(window.gameLoop);
+
+                    // 【关键修复】移除按钮焦点，防止空格键误触发
+                    if (document.activeElement) {
+                        document.activeElement.blur();
+                    }
+                } catch(e) {
+                    alert("游戏启动错误: " + e.message);
+                    console.error(e);
+                }
+            };
+
+            // --- 输入控制 ---
+            window.handleInput = function(key) {
+                const goingUp = dy === -1; const goingDown = dy === 1;
+                const goingRight = dx === 1; const goingLeft = dx === -1;
+                switch (key) {
+                    case 'ArrowUp': case 'w': case 'W': case 'up': if (!goingDown) { nextDx = 0; nextDy = -1; } break;
+                    case 'ArrowDown': case 's': case 'S': case 'down': if (!goingUp) { nextDx = 0; nextDy = 1; } break;
+                    case 'ArrowLeft': case 'a': case 'A': case 'left': if (!goingRight) { nextDx = -1; nextDy = 0; } break;
+                    case 'ArrowRight': case 'd': case 'D': case 'right': if (!goingLeft) { nextDx = 1; nextDy = 0; } break;
+                    // '/' 的逻辑移到了 keydown 事件监听器中以支持“按住”
+                }
+            };
+
+            document.addEventListener('keydown', (e) => {
+                if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight", " "].indexOf(e.code) > -1) e.preventDefault();
+
+                // 倒退键逻辑 (按住)
+                if (e.key === '/' || e.key === '?') { // 兼容 ? 键（通常和/在同一个键）
+                    if (!isRewinding && gameHistory.length > 0) {
+                        isRewinding = true;
+                        cancelAnimationFrame(gameLoopId); // 停止正常游戏循环
+                        gameContainer.classList.add('rewind-active');
+                        rewindLoopId = requestAnimationFrame(rewindLoop); // 启动倒带循环
+                    }
+                }
+
+                // 减速逻辑 (按住)
+                if (e.code === 'Space' || e.key === ' ') {
+                    isSlowingDown = true;
+                    gameContainer.classList.add('slow-mo-active');
+                    statusIndicator.style.opacity = 1;
+                }
+
+                window.handleInput(e.key);
+            });
+
+            document.addEventListener('keyup', (e) => {
+                // 停止倒退
+                if (e.key === '/' || e.key === '?') {
+                    isRewinding = false;
+                    // 倒带循环会在下一帧检测到 isRewinding=false 后自动切换回 gameLoop
+                }
+
+                // 停止减速
+                if (e.code === 'Space' || e.key === ' ') {
+                    isSlowingDown = false;
+                    gameContainer.classList.remove('slow-mo-active');
+                    statusIndicator.style.opacity = 0;
+                }
+            });
+
+            // 移动端控制
+            document.querySelectorAll('.d-btn').forEach(btn => {
+                const dir = btn.dataset.dir;
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (dir === 'slow') { isSlowingDown = true; gameContainer.classList.add('slow-mo-active'); statusIndicator.style.opacity = 1; }
+                    else if (dir === 'undo') {
+                        // 移动端点击倒退（单击回退一步，虽然不如按住爽，但适配触摸）
+                        if (!isRewinding && gameHistory.length > 0) {
+                             // 为了简化移动端逻辑，这里触发一次倒带循环让它跑一帧
+                             isRewinding = true;
+                             cancelAnimationFrame(gameLoopId);
+                             gameContainer.classList.add('rewind-active');
+                             // 跑一帧后自动停止
+                             const oneFrameRewind = () => {
+                                 if (gameHistory.length > 0) {
+                                     const state = gameHistory.pop();
+                                     snake = state.snake; food = state.food; dx = state.dx; dy = state.dy; nextDx = state.nextDx; nextDy = state.nextDy; score = state.score; updateScore(score);
+                                     window.draw();
+                                     requestAnimationFrame(oneFrameRewind);
+                                 } else {
+                                     isRewinding = false; gameContainer.classList.remove('rewind-active');
+                                     if (isGameOver) { isGameOver = false; gameOverScreen.classList.add('hidden'); gameContainer.classList.remove('shake'); lastTime = performance.now(); gameLoopId = requestAnimationFrame(window.gameLoop); }
+                                     else { gameLoopId = requestAnimationFrame(window.gameLoop); }
+                                 }
+                             };
+                             rewindLoopId = requestAnimationFrame(oneFrameRewind);
+                        }
+                    }
+                    else { window.handleInput(dir); }
+                }, {passive: false});
+
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    if (dir === 'slow') { isSlowingDown = false; gameContainer.classList.remove('slow-mo-active'); statusIndicator.style.opacity = 0; }
+                    // undo 键不需要 touchend 逻辑
+                });
+
+                btn.addEventListener('mousedown', (e) => {
+                    if (dir === 'slow') { isSlowingDown = true; gameContainer.classList.add('slow-mo-active'); statusIndicator.style.opacity = 1; }
+                    else if (dir === 'undo') {
+                         if (!isRewinding && gameHistory.length > 0) {
+                             isRewinding = true; cancelAnimationFrame(gameLoopId); gameContainer.classList.add('rewind-active');
+                             const oneFrameRewind = () => {
+                                 if (gameHistory.length > 0) {
+                                     const state = gameHistory.pop(); snake = state.snake; food = state.food; dx = state.dx; dy = state.dy; nextDx = state.nextDx; nextDy = state.nextDy; score = state.score; updateScore(score); window.draw(); requestAnimationFrame(oneFrameRewind);
+                                 } else { isRewinding = false; gameContainer.classList.remove('rewind-active'); if (isGameOver) { isGameOver = false; gameOverScreen.classList.add('hidden'); gameContainer.classList.remove('shake'); lastTime = performance.now(); gameLoopId = requestAnimationFrame(window.gameLoop); } else { gameLoopId = requestAnimationFrame(window.gameLoop); } }
+                             };
+                             rewindLoopId = requestAnimationFrame(oneFrameRewind);
+                        }
+                    }
+                    else { window.handleInput(dir); }
+                });
+
+                btn.addEventListener('mouseup', (e) => {
+                    if (dir === 'slow') { isSlowingDown = false; gameContainer.classList.remove('slow-mo-active'); statusIndicator.style.opacity = 0; }
+                });
+            });
+
+            console.log("Snake Game Script Ready.");
+        })();
+    </script>
+</body>
+</html>
